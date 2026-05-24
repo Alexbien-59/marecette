@@ -2076,6 +2076,96 @@ function loadCatalogueTabs() {
   applyAllFilters();
 }
 
+// Met à jour les compteurs des onglets en fonction des filtres actifs
+function updateCatalogueTabCounts() {
+  const field = catMode === 'cat' ? 'cat' : 'origin';
+  const query = document.getElementById('cat-search-input')
+    ? document.getElementById('cat-search-input').value.trim().toLowerCase()
+    : '';
+
+  // Récupère toutes les catégories uniques
+  const uniqueValues = [...new Set(RECIPES.map(r => r[field]))].sort();
+
+  // Crée une map : catégorie → nombre de recettes qui matchent les filtres
+  const counts = {};
+
+  // Compte Favoris
+  const favs = getFavorites();
+  counts['__favs__'] = favs.filter(id => {
+    const r = RECIPES.find(x => x.id === id);
+    if (!r) return false;
+    // Applique les mêmes filtres que applyAllFilters
+    if (query && !r.title.toLowerCase().includes(query) &&
+        !r.tags.some(t => t.toLowerCase().includes(query)) &&
+        !r.cat.toLowerCase().includes(query) &&
+        !r.origin.toLowerCase().includes(query)) return false;
+    if (filterDiff !== 'all' && r.diff !== filterDiff) return false;
+    if (filterPrice !== 'all' && (PRICE_MAP[r.id] || 1) !== filterPrice) return false;
+    if (filterTime !== 'all') {
+      const totalTime = r.prep + r.cook;
+      if (filterTime === 'lt15' && totalTime >= 15) return false;
+      if (filterTime === '15to30' && (totalTime < 15 || totalTime > 30)) return false;
+      if (filterTime === '30to60' && (totalTime <= 30 || totalTime > 60)) return false;
+      if (filterTime === '60to90' && (totalTime <= 60 || totalTime > 90)) return false;
+      if (filterTime === 'gt90' && totalTime <= 90) return false;
+    }
+    if (filterVeg === 'veg' && !VEG_SET.has(r.id)) return false;
+    return true;
+  }).length;
+
+  // Compte "Toutes"
+  counts['all'] = RECIPES.filter(r => {
+    if (query && !r.title.toLowerCase().includes(query) &&
+        !r.tags.some(t => t.toLowerCase().includes(query)) &&
+        !r.cat.toLowerCase().includes(query) &&
+        !r.origin.toLowerCase().includes(query)) return false;
+    if (filterDiff !== 'all' && r.diff !== filterDiff) return false;
+    if (filterPrice !== 'all' && (PRICE_MAP[r.id] || 1) !== filterPrice) return false;
+    if (filterTime !== 'all') {
+      const totalTime = r.prep + r.cook;
+      if (filterTime === 'lt15' && totalTime >= 15) return false;
+      if (filterTime === '15to30' && (totalTime < 15 || totalTime > 30)) return false;
+      if (filterTime === '30to60' && (totalTime <= 30 || totalTime > 60)) return false;
+      if (filterTime === '60to90' && (totalTime <= 60 || totalTime > 90)) return false;
+      if (filterTime === 'gt90' && totalTime <= 90) return false;
+    }
+    if (filterVeg === 'veg' && !VEG_SET.has(r.id)) return false;
+    return true;
+  }).length;
+
+  // Compte pour chaque catégorie
+  uniqueValues.forEach(val => {
+    counts[val] = RECIPES.filter(r => {
+      if (r[field] !== val) return false;
+      if (query && !r.title.toLowerCase().includes(query) &&
+          !r.tags.some(t => t.toLowerCase().includes(query)) &&
+          !r.cat.toLowerCase().includes(query) &&
+          !r.origin.toLowerCase().includes(query)) return false;
+      if (filterDiff !== 'all' && r.diff !== filterDiff) return false;
+      if (filterPrice !== 'all' && (PRICE_MAP[r.id] || 1) !== filterPrice) return false;
+      if (filterTime !== 'all') {
+        const totalTime = r.prep + r.cook;
+        if (filterTime === 'lt15' && totalTime >= 15) return false;
+        if (filterTime === '15to30' && (totalTime < 15 || totalTime > 30)) return false;
+        if (filterTime === '30to60' && (totalTime <= 30 || totalTime > 60)) return false;
+        if (filterTime === '60to90' && (totalTime <= 60 || totalTime > 90)) return false;
+        if (filterTime === 'gt90' && totalTime <= 90) return false;
+      }
+      if (filterVeg === 'veg' && !VEG_SET.has(r.id)) return false;
+      return true;
+    }).length;
+  });
+
+  // Met à jour les onglets avec les nouveaux compteurs
+  document.querySelectorAll('#cat-tabs .cat-tab').forEach(tab => {
+    const val = tab.dataset.val;
+    const count = counts[val] !== undefined ? counts[val] : 0;
+    const label = val === '__favs__' ? '❤️ Favoris' :
+                  val === 'all' ? 'Toutes' : val;
+    tab.textContent = `${label} (${count})`;
+  });
+}
+
 // ── Fonction centrale : applique TOUS les filtres actifs ──────────────────
 // Ordre : onglet → recherche texte → difficulté → prix → temps
 function applyAllFilters() {
@@ -2134,6 +2224,9 @@ function applyAllFilters() {
   // Synchronise le bouton Réinitialiser selon l'état réel des filtres
   syncFabReset('catalogue');
 
+  // Met à jour les compteurs des onglets en fonction des filtres actifs
+  updateCatalogueTabCounts();
+
   if (pool.length === 0) {
     document.getElementById('catalogue-results').innerHTML =
       `<div class="empty-state"><div class="big">🔍</div><p>Aucune recette ne correspond à ces filtres.</p></div>`;
@@ -2170,6 +2263,7 @@ function resetAllFilters() {
   });
 
   syncFabReset('catalogue'); // Masque le bouton car plus aucun filtre actif
+  updateCatalogueTabCounts(); // Remet à jour les compteurs
   renderCatalogueGrid(shuffle(RECIPES.slice()));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
